@@ -48,6 +48,9 @@ struct ContentView: View {
     @State private var liveOn: Bool = false
     @State private var renkoBrick: Double = 0.0
     @State private var alertLineId: Int = 0
+    @State private var showDonchian: Bool = false
+    @State private var alertToast: String? = nil
+    @State private var alertToastTask: Task<Void, Never>? = nil
 
     enum PivotMode: String, CaseIterable, Identifiable {
         case off = "Off", standard = "Std", fibonacci = "Fib", camarilla = "Cam"
@@ -57,8 +60,19 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            TradeChartView(chart: chart, drawingMode: $drawingMode)
-                .background(Color(red: 0.04, green: 0.05, blue: 0.07))
+            ZStack(alignment: .top) {
+                TradeChartView(chart: chart, drawingMode: $drawingMode)
+                    .background(Color(red: 0.04, green: 0.05, blue: 0.07))
+                if let msg = alertToast {
+                    Text(msg)
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.pink.opacity(0.85), in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(.top, 8)
+                        .transition(.opacity)
+                }
+            }
             controls
         }
         .ignoresSafeArea(edges: .bottom)
@@ -71,6 +85,15 @@ struct ContentView: View {
         }
         if showEMA {
             chart.addIndicator(.ema, period: 60, color: ChartColor(r: 0.45, g: 0.80, b: 1.00))
+        }
+        // 알림선 cross 시 토스트 표시
+        chart.setAlertCallback { _, price in
+            alertToast = String(format: "알림 ⚡ %.2f 도달", price)
+            alertToastTask?.cancel()
+            alertToastTask = Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if !Task.isCancelled { alertToast = nil }
+            }
         }
     }
 
@@ -160,6 +183,12 @@ struct ContentView: View {
                         on ? chart.addBollinger(period: 20, stddev: 2.0,
                                                 color: ChartColor(r: 0.55, g: 0.85, b: 1.0))
                            : chart.removeIndicator(.bollinger, period: 20)
+                    }
+                    indicatorChip("Donch", isOn: $showDonchian) { on in
+                        on ? chart.addDonchian(period: 20,
+                                               color:     ChartColor(r: 1.00, g: 0.55, b: 0.85),
+                                               edgeColor: ChartColor(r: 1.00, g: 0.55, b: 0.85, a: 0.5))
+                           : chart.removeIndicator(.donchian, period: 20)
                     }
                     indicatorChip("RSI",   isOn: $showRSI)   { on in
                         on ? chart.addRSI(period: 14, color: ChartColor(r: 0.95, g: 0.55, b: 0.95))

@@ -52,6 +52,15 @@ TradeChartView(chart: chart)
   로 같은 흐름 구현.
 - **deprecated**: `chart.pan(deltaPixels:)` / `chart.zoom(factor:anchorX:)`은 곧 제거.
   대신 `chart.applyPan(dxPx:)` / `chart.applyPinch(scale:anchorPx:)` 사용.
+- **좌표 변환**: 호스트 커스텀 overlay/annotation을 `TradeChartView` 위에 그릴 때
+  `chart.indexAt(screenX:)` / `chart.screenX(forIndex:)` / `chart.price(atScreenY:)` /
+  `chart.screenY(forPrice:)`로 화면-도메인 변환. PRICE_LOG/PERCENT 모드에서도
+  raw price가 보장된다. **buildFrame 후에만 의미** — 첫 프레임 전엔 0/실패 반환.
+- **알림 cross**: `chart.setAlertCallback { id, price in ... }`로 등록하면
+  `appendCandle`/`updateLast`로 들어온 가격이 알림선을 가로지를 때 main thread에서
+  콜백 호출. 호스트는 푸시/햅틱/사운드 트리거.
+- **Donchian Channels**: `chart.addDonchian(period: 20, color:, edgeColor:)` —
+  period 캔들의 최고/최저/중앙선. 터틀 트레이딩 셋업.
 
 ## 샘플 앱 실행
 

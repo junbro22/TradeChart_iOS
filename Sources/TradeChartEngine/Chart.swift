@@ -57,6 +57,7 @@ public enum IndicatorKind: Int32, Sendable {
     case pivotStandard  = 7
     case pivotFibonacci = 8
     case pivotCamarilla = 9
+    case donchian       = 10
     // Subpanel
     case rsi        = 100
     case macd       = 101
@@ -171,6 +172,8 @@ public final class Chart {
     }
 
     deinit {
+        // 콜백 raw 포인터가 self였으므로 destroy 전에 해제 (방어적).
+        tce_set_alert_callback(ctx, nil, nil)
         tce_destroy(ctx)
     }
 
@@ -216,6 +219,53 @@ public final class Chart {
 
     public func resetViewport() { tce_reset_viewport(ctx) }
     public func fitAll()        { tce_fit_all(ctx) }
+
+    // MARK: 좌표 변환 (커스텀 overlay/annotation용 — buildFrame 후에만 의미)
+
+    /// 화면 X(px) → 캔들 인덱스. plot 영역 밖이면 nil.
+    public func indexAt(screenX: CGFloat) -> Int? {
+        let i = tce_screen_x_to_index(ctx, Float(screenX))
+        return i >= 0 ? Int(i) : nil
+    }
+
+    /// 캔들 인덱스 → 화면 X(px) 중심. 가시 viewport 밖이면 nil.
+    public func screenX(forIndex index: Int) -> CGFloat? {
+        var x: Float = 0
+        guard tce_index_to_screen_x(ctx, Int32(index), &x) == 1 else { return nil }
+        return CGFloat(x)
+    }
+
+    /// 화면 Y(px) → raw price. PRICE_LOG/PERCENT 자동 역변환.
+    public func price(atScreenY y: CGFloat) -> Double {
+        tce_screen_y_to_price(ctx, Float(y))
+    }
+
+    /// raw price → 화면 Y(px). PRICE_LOG/PERCENT 자동 변환.
+    public func screenY(forPrice price: Double) -> CGFloat {
+        CGFloat(tce_price_to_screen_y(ctx, price))
+    }
+
+    // MARK: 알림 cross 콜백
+
+    /// Chart 인스턴스 단위 — deinit 시 자동 해제.
+    private var alertCallback: ((Int, Double) -> Void)?
+
+    /// 알림선 cross 시 호출 — append/updateLast 시 prev_close ↔ new_close 사이의
+    /// alert.price를 가로지르면 한 번 호출. `cb=nil`로 해제.
+    /// @note 콜백은 main thread(append/updateLast 호출 스레드)에서 동기 호출.
+    public func setAlertCallback(_ cb: ((_ alertId: Int, _ price: Double) -> Void)?) {
+        alertCallback = cb
+        if cb != nil {
+            let userPtr = Unmanaged.passUnretained(self).toOpaque()
+            tce_set_alert_callback(ctx, { id, price, user in
+                guard let user else { return }
+                let chart = Unmanaged<Chart>.fromOpaque(user).takeUnretainedValue()
+                chart.alertCallback?(Int(id), price)
+            }, userPtr)
+        } else {
+            tce_set_alert_callback(ctx, nil, nil)
+        }
+    }
 
     // MARK: 데이터
 
@@ -294,6 +344,10 @@ public final class Chart {
 
     public func addBollinger(period: Int = 20, stddev: Double = 2.0, color: ChartColor) {
         tce_add_bollinger(ctx, Int32(period), stddev, color.c)
+    }
+
+    public func addDonchian(period: Int = 20, color: ChartColor, edgeColor: ChartColor) {
+        tce_add_donchian(ctx, Int32(period), color.c, edgeColor.c)
     }
 
     public func addRSI(period: Int = 14, color: ChartColor) {

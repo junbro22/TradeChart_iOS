@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "tradechartengine",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/junbro22/TradeChartEngine.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "c96908a0e02950c2a4f8332a06779d50b5847054"
+      }
+    }
+  ],
+  "version" : 2
+}
