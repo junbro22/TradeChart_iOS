@@ -11,6 +11,7 @@ public struct TradeChartView: View {
 
     @State private var labels: [ChartLabel] = []
     @State private var pixelSize: CGSize = .zero
+    @State private var labelSizes: [Int: CGSize] = [:]
 
     public init(chart: Chart,
                 drawingMode: Binding<DrawingKind?> = .constant(nil),
@@ -39,7 +40,7 @@ public struct TradeChartView: View {
                     ? geo.size.width / pixelSize.width
                     : 1.0
                 ForEach(labels.indices, id: \.self) { i in
-                    labelView(labels[i], scale: scale)
+                    labelView(labels[i], index: i, scale: scale)
                 }
             }
             .allowsHitTesting(false)   // 제스처가 MTKView로 통과
@@ -47,7 +48,7 @@ public struct TradeChartView: View {
     }
 
     @ViewBuilder
-    private func labelView(_ label: ChartLabel, scale: CGFloat) -> some View {
+    private func labelView(_ label: ChartLabel, index: Int, scale: CGFloat) -> some View {
         let textColor = Color(red: Double(label.color.r),
                               green: Double(label.color.g),
                               blue:  Double(label.color.b),
@@ -64,14 +65,45 @@ public struct TradeChartView: View {
             .padding(.vertical,   label.background.a > 0 ? 1 : 0)
             .background(bgColor)
             .cornerRadius(label.background.a > 0 ? 3 : 0)
-            .position(
-                anchorPosition(label: label, scale: scale)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(key: LabelSizeKey.self,
+                                    value: [index: proxy.size])
+                }
             )
+            .onPreferenceChange(LabelSizeKey.self) { sizes in
+                for (k, v) in sizes { labelSizes[k] = v }
+            }
+            .position(anchorPosition(label: label, index: index, scale: scale))
     }
 
-    private func anchorPosition(label: ChartLabel, scale: CGFloat) -> CGPoint {
-        // label.x/y는 엔진이 결정한 픽셀 좌표 (이미 padding 반영). wrapper는 그대로 사용.
-        CGPoint(x: label.x * scale, y: label.y * scale)
+    private func anchorPosition(label: ChartLabel, index: Int, scale: CGFloat) -> CGPoint {
+        // SwiftUI .position은 view의 center 기준으로 좌표를 매핑한다.
+        // 엔진이 emit한 label.anchor가 어느 점을 (label.x, label.y)에 두려는지 알려주므로
+        // 측정한 텍스트 크기를 보고 center가 어디 와야 하는지 계산해 보정한다.
+        let s = labelSizes[index] ?? .zero
+        let baseX = CGFloat(label.x) * scale
+        let baseY = CGFloat(label.y) * scale
+        switch label.anchor {
+        case .leftCenter:
+            return CGPoint(x: baseX + s.width / 2, y: baseY)
+        case .rightCenter:
+            return CGPoint(x: baseX - s.width / 2, y: baseY)
+        case .centerTop:
+            return CGPoint(x: baseX, y: baseY + s.height / 2)
+        case .centerBottom:
+            return CGPoint(x: baseX, y: baseY - s.height / 2)
+        case .centerCenter:
+            return CGPoint(x: baseX, y: baseY)
+        }
+    }
+}
+
+private struct LabelSizeKey: PreferenceKey {
+    static let defaultValue: [Int: CGSize] = [:]
+    static func reduce(value: inout [Int: CGSize], nextValue: () -> [Int: CGSize]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 

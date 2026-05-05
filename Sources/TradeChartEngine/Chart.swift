@@ -26,9 +26,18 @@ public struct Candle: Sendable, Equatable {
 }
 
 public enum SeriesType: Int32, Sendable {
-    case candle = 0
-    case line   = 1
-    case area   = 2
+    case candle      = 0
+    case line        = 1
+    case area        = 2
+    case ohlcBar     = 3
+    case heikinAshi  = 4
+    case renko       = 5
+}
+
+public enum PriceAxisMode: Int32, Sendable {
+    case linear  = 0
+    case log     = 1
+    case percent = 2
 }
 
 public enum ColorScheme: Int32, Sendable {
@@ -128,13 +137,36 @@ public struct ChartLabel: Sendable {
     public let background: ChartColor   // alpha 0이면 배경 없음
 }
 
+// MARK: - Layout (TceLayout 미러)
+
+public struct ChartRect: Sendable, Equatable {
+    public let x: CGFloat
+    public let y: CGFloat
+    public let width: CGFloat
+    public let height: CGFloat
+}
+
+public struct ChartLayout: Sendable {
+    public let plot: ChartRect
+    public let priceAxis: ChartRect
+    public let timeAxis: ChartRect
+    public let volumePanel: ChartRect
+    public let subpanels: [ChartRect]
+}
+
 // MARK: - Chart
 
+/// TradeChartEngine의 Swift 래퍼.
+///
+/// **스레드 안전성**: 한 인스턴스의 모든 메서드는 main thread에서만 호출해야 한다.
+/// 엔진은 단일-스레드 진입을 가정한다. 호스트가 백그라운드에서 데이터를 받아
+/// 차트에 push할 때는 `DispatchQueue.main.async` 또는 `await MainActor.run { ... }`로 감싸야 한다.
 public final class Chart {
     private let ctx: OpaquePointer
 
-    public init() {
-        guard let p = tce_create() else { fatalError("tce_create failed") }
+    /// 엔진 컨텍스트 생성. 메모리 부족 시 nil.
+    public init?() {
+        guard let p = tce_create() else { return nil }
         self.ctx = p
     }
 
@@ -145,6 +177,45 @@ public final class Chart {
     public static var version: String {
         String(cString: tce_version())
     }
+
+    /// 마지막 buildFrame 기준의 패널 레이아웃 (px 좌표).
+    /// buildFrame 호출 전에는 모든 사각형이 0인 layout 반환.
+    public func layout() -> ChartLayout {
+        let l = tce_layout(ctx)
+        let toRect: (TceRect) -> ChartRect = {
+            ChartRect(x: CGFloat($0.x), y: CGFloat($0.y),
+                      width: CGFloat($0.width), height: CGFloat($0.height))
+        }
+        var subs: [ChartRect] = []
+        let n = Int(l.subpanelCount)
+        if n > 0 {
+            withUnsafeBytes(of: l.subpanels) { raw in
+                let buf = raw.bindMemory(to: TceRect.self)
+                for i in 0..<min(n, buf.count) {
+                    subs.append(toRect(buf[i]))
+                }
+            }
+        }
+        return ChartLayout(
+            plot: toRect(l.plot),
+            priceAxis: toRect(l.priceAxis),
+            timeAxis: toRect(l.timeAxis),
+            volumePanel: toRect(l.volumePanel),
+            subpanels: subs
+        )
+    }
+
+    /// index 위치의 캔들. 범위 밖이면 nil.
+    public func candle(at index: Int) -> Candle? {
+        var c = TceCandle()
+        guard index >= 0,
+              tce_get_candle(ctx, index, &c) == 1 else { return nil }
+        return Candle(timestamp: c.timestamp, open: c.open, high: c.high,
+                      low: c.low, close: c.close, volume: c.volume)
+    }
+
+    public func resetViewport() { tce_reset_viewport(ctx) }
+    public func fitAll()        { tce_fit_all(ctx) }
 
     // MARK: 데이터
 
@@ -184,6 +255,18 @@ public final class Chart {
 
     public func setVolumePanelVisible(_ visible: Bool) {
         tce_set_volume_panel_visible(ctx, visible ? 1 : 0)
+    }
+
+    public func setPriceAxisMode(_ mode: PriceAxisMode) {
+        tce_set_price_axis_mode(ctx, TcePriceAxisMode(rawValue: UInt32(mode.rawValue)))
+    }
+
+    public func setRenkoBrickSize(_ size: Double) {
+        tce_set_renko_brick_size(ctx, size)
+    }
+
+    public func setShowGrid(_ show: Bool) {
+        tce_set_show_grid(ctx, show ? 1 : 0)
     }
 
     // MARK: 지표
@@ -355,10 +438,12 @@ public final class Chart {
         set { tce_set_right_offset(ctx, Int32(newValue)) }
     }
 
+    @available(*, deprecated, message: "use applyPan(dxPx:) instead")
     public func pan(deltaPixels: CGFloat) {
         tce_pan(ctx, Float(deltaPixels))
     }
 
+    @available(*, deprecated, message: "use applyPinch(scale:anchorPx:) instead")
     public func zoom(factor: CGFloat, anchorX: CGFloat) {
         tce_zoom(ctx, Float(factor), Float(anchorX))
     }
