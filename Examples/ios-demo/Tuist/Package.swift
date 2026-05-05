@@ -11,6 +11,6 @@ let packageSettings = PackageSettings(
 let package = Package(
     name: "TradeChartDemo",
     dependencies: [
-        .package(path: "../.."),    // TradeChart_iOS 루트
+        .package(path: "../../.."),    // TradeChart_iOS 루트
     ]
 )
