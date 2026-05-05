@@ -1,0 +1,24 @@
+# Build
+build/
+build-*/
+DerivedData/
+.build/
+.swiftpm/
+
+# Xcode
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+
+# Tuist
+**/Derived/
+*.xcodeproj/
+*.xcworkspace/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
