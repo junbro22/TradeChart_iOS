@@ -131,13 +131,16 @@ struct ContentView: View {
             .toggleStyle(.switch)
             .font(.caption)
 
-            // Renko brick size — Renko 모드일 때만
+            // Renko brick size — Renko 모드일 때만. 가격의 0.1%~3% 사이를 슬라이더로.
             if seriesType == .renko {
+                let lastPrice = chart.candle(at: max(0, chart.candleCount - 1))?.close ?? 100
+                let lo = lastPrice * 0.001
+                let hi = lastPrice * 0.03
                 HStack {
                     Text("brick").font(.caption)
-                    Slider(value: $renkoBrick, in: 0...50, step: 0.5)
+                    Slider(value: $renkoBrick, in: lo...hi, step: max(0.1, lo))
                         .onChange(of: renkoBrick) { v in chart.setRenkoBrickSize(v) }
-                    Text(String(format: "%.1f", renkoBrick)).font(.caption.monospaced())
+                    Text(String(format: "%.2f", renkoBrick)).font(.caption.monospaced())
                 }
             }
 
@@ -305,15 +308,31 @@ struct ContentView: View {
     private func startLive() {
         liveTask?.cancel()
         liveTask = Task { @MainActor in
-            var prev = chart.candleCount > 0
-                ? (chart.candle(at: chart.candleCount - 1)?.close ?? 100)
-                : 100
+            var ticksOnCurrent = 0
+            // 0.4초마다 tick — 12회당(약 5초) 새 분봉 생성 시뮬.
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                try? await Task.sleep(nanoseconds: 400_000_000)
                 if Task.isCancelled { break }
-                let drift = Double.random(in: -1.5...1.5)
-                prev = max(1.0, prev + drift)
-                chart.updateLast(close: prev, volume: Double.random(in: 800...1800))
+                let n = chart.candleCount
+                guard n > 0, let last = chart.candle(at: n - 1) else { continue }
+                let driftPct = Double.random(in: -0.002...0.002) // ±0.2%
+                let nextClose = max(1.0, last.close * (1.0 + driftPct))
+                if ticksOnCurrent < 12 {
+                    chart.updateLast(close: nextClose,
+                                     volume: last.volume + Double.random(in: 50...300))
+                    ticksOnCurrent += 1
+                } else {
+                    // 새 분봉 생성 — 한국 분봉 단위(60초) 가정.
+                    let nextTs = last.timestamp + 60.0
+                    let newCandle = Candle(timestamp: nextTs,
+                                           open: last.close,
+                                           high: max(last.close, nextClose),
+                                           low:  min(last.close, nextClose),
+                                           close: nextClose,
+                                           volume: Double.random(in: 800...1500))
+                    chart.appendCandle(newCandle)
+                    ticksOnCurrent = 0
+                }
             }
         }
     }
@@ -328,6 +347,12 @@ struct ContentView: View {
         return Button {
             seriesType = value
             chart.setSeriesType(value)
+            // Renko 진입 시 brick 자동값(가격 0.5%) 한 번 셋팅
+            if value == .renko, renkoBrick == 0 {
+                let last = chart.candle(at: max(0, chart.candleCount - 1))?.close ?? 100
+                renkoBrick = last * 0.005
+                chart.setRenkoBrickSize(renkoBrick)
+            }
         } label: {
             Text(label)
                 .font(.caption.monospaced())

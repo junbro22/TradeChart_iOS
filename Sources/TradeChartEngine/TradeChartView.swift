@@ -58,6 +58,7 @@ public struct TradeChartView: View {
                             blue:  Double(label.background.b),
                             opacity: Double(label.background.a))
 
+        let measured = labelSizes[index] != nil
         Text(label.text)
             .font(.system(size: 10, weight: label.kind == .lastPrice ? .semibold : .regular).monospacedDigit())
             .foregroundStyle(textColor)
@@ -75,6 +76,8 @@ public struct TradeChartView: View {
             .onPreferenceChange(LabelSizeKey.self) { sizes in
                 for (k, v) in sizes { labelSizes[k] = v }
             }
+            // CENTER_CENTER 외 anchor는 첫 프레임 때 size가 비어 있어 어긋날 수 있다 — 측정 전엔 hidden.
+            .opacity(label.anchor == .centerCenter || measured ? 1 : 0)
             .position(anchorPosition(label: label, index: index, scale: scale))
     }
 
@@ -163,6 +166,7 @@ private struct ChartMetalLayer: UIViewRepresentable {
         let currentDrawingMode: () -> DrawingKind?
         private var renderer: MetalRenderer?
         private var currentDrawingId: Int? = nil
+        private var draggingAlertId: Int? = nil
 
         init(chart: Chart,
              onCrosshairChange: ((Chart.CrosshairInfo) -> Void)?,
@@ -240,6 +244,26 @@ private struct ChartMetalLayer: UIViewRepresentable {
                 default: break
                 }
                 view.setNeedsDisplay()
+                return
+            }
+
+            // AlertLine 드래그 — 시작 지점에서 가까운 알림선이 있으면 그것을 잡는다.
+            if g.state == .began {
+                let p = g.location(in: view)
+                let py = p.y * scale
+                let id = chart.hitTestAlertLine(screenY: py)
+                if id != 0 {
+                    draggingAlertId = id
+                }
+            }
+            if let id = draggingAlertId {
+                if g.state == .changed {
+                    let p = g.location(in: view)
+                    chart.updateAlertLine(id: id, screenY: p.y * scale)
+                    view.setNeedsDisplay()
+                } else if g.state == .ended || g.state == .cancelled || g.state == .failed {
+                    draggingAlertId = nil
+                }
                 return
             }
 
