@@ -50,6 +50,9 @@ struct ContentView: View {
     @State private var alertLineId: Int = 0
     @State private var showDonchian: Bool = false
     @State private var showKeltner: Bool = false
+    @State private var showZigZag: Bool = false
+    @State private var showVWAPBands: Bool = false
+    @State private var savedDrawings: [Chart.DrawingExport] = []
     @State private var alertToast: String? = nil
     @State private var alertToastTask: Task<Void, Never>? = nil
     @State private var crosshairInfo: Chart.CrosshairInfo? = nil
@@ -247,6 +250,23 @@ struct ContentView: View {
                                               edgeColor: ChartColor(r: 0.55, g: 1.00, b: 0.65, a: 0.5))
                            : chart.removeIndicator(.keltner, period: 20)
                     }
+                    indicatorChip("ZigZag", isOn: $showZigZag) { on in
+                        on ? chart.addZigZag(deviationPct: 5.0,
+                                             color: ChartColor(r: 1.00, g: 0.85, b: 0.20))
+                           : chart.removeIndicator(.zigzag, period: 0)
+                    }
+                    indicatorChip("VWAP±2σ", isOn: $showVWAPBands) { on in
+                        if on {
+                            chart.addVWAPWithBands(numStdev: 2.0,
+                                color:     ChartColor(r: 0.95, g: 0.55, b: 0.95),
+                                bandColor: ChartColor(r: 0.95, g: 0.55, b: 0.95, a: 0.5))
+                        } else if showVWAP {
+                            // ±σ만 끄고 plain은 유지 — spec을 plain 형태로 갱신
+                            chart.addVWAP(color: ChartColor(r: 0.95, g: 0.55, b: 0.95))
+                        } else {
+                            chart.removeIndicator(.vwap, period: 0)
+                        }
+                    }
                     indicatorChip("RSI",   isOn: $showRSI)   { on in
                         on ? chart.addRSI(period: 14, color: ChartColor(r: 0.95, g: 0.55, b: 0.95))
                            : chart.removeIndicator(.rsi, period: 14)
@@ -287,8 +307,20 @@ struct ContentView: View {
                            : chart.removeIndicator(.supertrend, period: 10)
                     }
                     indicatorChip("VWAP",  isOn: $showVWAP) { on in
-                        on ? chart.addVWAP(color: ChartColor(r: 0.95, g: 0.55, b: 0.95))
-                           : chart.removeIndicator(.vwap, period: 0)
+                        // VWAP과 VWAP±σ는 같은 spec(kind=VWAP, period=0)을 공유한다.
+                        // 사용자가 plain만 원하는 경우 ±σ가 켜져 있으면 그걸 우선 — band-only 등록 유지.
+                        if on {
+                            if showVWAPBands {
+                                chart.addVWAPWithBands(numStdev: 2.0,
+                                    color:     ChartColor(r: 0.95, g: 0.55, b: 0.95),
+                                    bandColor: ChartColor(r: 0.95, g: 0.55, b: 0.95, a: 0.5))
+                            } else {
+                                chart.addVWAP(color: ChartColor(r: 0.95, g: 0.55, b: 0.95))
+                            }
+                        } else if !showVWAPBands {
+                            chart.removeIndicator(.vwap, period: 0)
+                        }
+                        // showVWAPBands가 켜져있는데 plain 끄기는 spec 유지 (bands 형태로 잔존)
                     }
                     indicatorChip("DMI",   isOn: $showDMI) { on in
                         on ? chart.addDMI(period: 14,
@@ -345,6 +377,16 @@ struct ContentView: View {
                 drawingChip("Fib", active: drawingMode == .fibRetracement) { drawingMode = .fibRetracement }
                 drawingChip("Mes", active: drawingMode == .measure)   { drawingMode = .measure }
                 Spacer()
+                Button("Save") { savedDrawings = chart.exportDrawings() }
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.cyan)
+                Button("Load") {
+                    chart.clearDrawings()
+                    chart.importDrawings(savedDrawings)
+                }
+                .font(.caption.monospaced())
+                .foregroundStyle(.cyan)
+                .disabled(savedDrawings.isEmpty)
                 Button("Clear") { chart.clearDrawings() }
                     .font(.caption.monospaced())
                     .foregroundStyle(.red)

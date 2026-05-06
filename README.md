@@ -72,6 +72,17 @@ TradeChartView(chart: chart)
 - **세션 시작 보정**: `chart.setSessionStartUTC(hour: 14, minute: 30)` (NYSE 09:30 EST).
   VWAP/Pivot의 일별 boundary가 거래소 세션 시작 시각으로 정렬. KR/JP=default(0,0), CET=(8,0).
   **DST**: 호스트가 시즌별로 UTC 시각을 다시 호출 (NYSE EDT 시 13:30, EST 시 14:30).
+- **VWAP ± σ 밴드**: `chart.addVWAPWithBands(numStdev: 2.0, color:, bandColor:)`.
+  같은 day session 내 가중분산으로 sigma 계산. `queryVWAPBands(at:)`로 hover 값 조회.
+- **ZigZag**: `chart.addZigZag(deviationPct: 5.0, color:)`. swing high/low 직선 연결.
+  **repaint 주의**: 마지막 swing은 잠정값이며 새 캔들이 들어와 더 큰 극값이 나오면
+  위치가 갱신된다. ZigZag 기반 알림은 신뢰성 검증 후 사용할 것.
+- **드로잉 저장/복원**: `let saved = chart.exportDrawings()` → JSON으로 영속화 →
+  복원 시 `chart.importDrawings(saved)`. 도메인 좌표(timestamp/price) 기반이라
+  series가 달라도 안전. host가 `Codable` `[Chart.DrawingExport]`를 원하는 형식으로 직렬화.
+- **알림 콜백 lifecycle**: host가 `setAlertCallback`의 user 컨텍스트를 해제하기 전에는
+  반드시 `chart.setAlertCallback(nil)`을 명시 호출해 dangling 방지.
+  `tce_destroy`도 자동 nullify하지만 destroy 이전에 user 객체가 해제되는 경로를 위해.
 
 ## 샘플 앱 실행
 

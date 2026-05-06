@@ -59,6 +59,7 @@ public enum IndicatorKind: Int32, Sendable {
     case pivotCamarilla = 9
     case donchian       = 10
     case keltner        = 11
+    case zigzag         = 12
     // Subpanel
     case rsi        = 100
     case macd       = 101
@@ -358,6 +359,78 @@ public final class Chart {
         return SuperTrendValue(line: l, direction: Int(d))
     }
 
+    public func queryVWAPBands(at index: Int) -> BandValue? {
+        var m: Double = 0, u: Double = 0, l: Double = 0
+        guard tce_query_vwap_bands(ctx, index, &m, &u, &l) == 1 else { return nil }
+        return BandValue(upper: u, middle: m, lower: l)
+    }
+
+    // MARK: 드로잉 직렬화
+
+    /// 영속 저장용. 도메인 좌표(timestamp/price) 기반이라 차트 series가 달라도 안전.
+    public struct DrawingExport: Codable, Sendable {
+        public var kind: Int32          // DrawingKind raw
+        public var r: Float; public var g: Float; public var b: Float; public var a: Float
+        public var pointCount: Int      // 1 or 2
+        public var ts: [Double]         // size pointCount
+        public var price: [Double]
+    }
+
+    public func exportDrawings() -> [DrawingExport] {
+        let n = tce_drawing_count(ctx)
+        var out: [DrawingExport] = []
+        out.reserveCapacity(n)
+        for i in 0..<n {
+            var raw = TceDrawingExport()
+            guard tce_drawing_export(ctx, i, &raw) == 1 else { continue }
+            let pc = Int(raw.point_count)
+            let tsArr: [Double] = withUnsafeBytes(of: raw.ts) { buf in
+                let p = buf.bindMemory(to: Double.self)
+                return Array(p[0..<min(pc, p.count)])
+            }
+            let pxArr: [Double] = withUnsafeBytes(of: raw.price) { buf in
+                let p = buf.bindMemory(to: Double.self)
+                return Array(p[0..<min(pc, p.count)])
+            }
+            out.append(DrawingExport(
+                kind: Int32(raw.kind.rawValue),
+                r: raw.color.r, g: raw.color.g, b: raw.color.b, a: raw.color.a,
+                pointCount: pc, ts: tsArr, price: pxArr
+            ))
+        }
+        return out
+    }
+
+    /// import — 새 id 부여 후 반환 배열. invalid 항목(kind 범위 밖/point_count 불일치
+    /// /배열 길이 부족)은 silent skip. 외부 JSON 등 신뢰할 수 없는 데이터에도 안전.
+    @discardableResult
+    public func importDrawings(_ drawings: [DrawingExport]) -> [Int] {
+        var ids: [Int] = []
+        for d in drawings {
+            // 외부 입력 가드 — fatal error 방지
+            guard (0...5).contains(d.kind),
+                  (1...2).contains(d.pointCount),
+                  d.ts.count >= d.pointCount,
+                  d.price.count >= d.pointCount else { continue }
+
+            var raw = TceDrawingExport()
+            raw.kind = TceDrawingKind(rawValue: UInt32(d.kind))
+            raw.color = TceColor(r: d.r, g: d.g, b: d.b, a: d.a)
+            raw.point_count = Int32(d.pointCount)
+            for i in 0..<d.pointCount {
+                withUnsafeMutableBytes(of: &raw.ts) {
+                    $0.bindMemory(to: Double.self)[i] = d.ts[i]
+                }
+                withUnsafeMutableBytes(of: &raw.price) {
+                    $0.bindMemory(to: Double.self)[i] = d.price[i]
+                }
+            }
+            let id = tce_drawing_import(ctx, &raw)
+            if id > 0 { ids.append(Int(id)) }
+        }
+        return ids
+    }
+
     // MARK: 알림 cross 콜백
 
     /// Chart 인스턴스 단위 — deinit 시 자동 해제.
@@ -517,6 +590,17 @@ public final class Chart {
 
     public func addVWAP(color: ChartColor) {
         tce_add_vwap(ctx, color.c)
+    }
+
+    /// VWAP + ±numStdev × sigma 밴드. numStdev<=0이면 plain VWAP과 동일.
+    public func addVWAPWithBands(numStdev: Double = 2.0,
+                                 color: ChartColor, bandColor: ChartColor) {
+        tce_add_vwap_with_bands(ctx, numStdev, color.c, bandColor.c)
+    }
+
+    /// ZigZag — deviationPct(%) 이상 swing high/low 직선. **repaint 주의**: 마지막 swing은 잠정값.
+    public func addZigZag(deviationPct: Double = 5.0, color: ChartColor) {
+        tce_add_zigzag(ctx, deviationPct, color.c)
     }
 
     public func addDMI(period: Int = 14,
