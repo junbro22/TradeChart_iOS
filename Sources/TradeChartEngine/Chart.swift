@@ -58,6 +58,7 @@ public enum IndicatorKind: Int32, Sendable {
     case pivotFibonacci = 8
     case pivotCamarilla = 9
     case donchian       = 10
+    case keltner        = 11
     // Subpanel
     case rsi        = 100
     case macd       = 101
@@ -245,6 +246,118 @@ public final class Chart {
         CGFloat(tce_price_to_screen_y(ctx, price))
     }
 
+    // MARK: 지표 값 query (crosshair hover 라벨용)
+    //
+    // 정책: 등록된 (kind, period) spec이 정확히 매치되어야 값을 반환. 미등록/index 범위 밖/
+    //       첫 (period-1)개 → nil. period가 없는 지표(VWAP/OBV/Pivot)는 0 입력.
+
+    public func queryIndicator(_ kind: IndicatorKind, period: Int, at index: Int) -> Double? {
+        var v: Double = 0
+        guard tce_query_indicator_value(ctx, TceIndicatorKind(rawValue: UInt32(kind.rawValue)),
+                                        Int32(period), index, &v) == 1 else { return nil }
+        return v
+    }
+
+    public struct BandValue: Sendable {
+        public let upper: Double
+        public let middle: Double
+        public let lower: Double
+    }
+
+    public func queryBollinger(period: Int, at index: Int) -> BandValue? {
+        var u: Double = 0, m: Double = 0, l: Double = 0
+        guard tce_query_bollinger(ctx, Int32(period), index, &u, &m, &l) == 1 else { return nil }
+        return BandValue(upper: u, middle: m, lower: l)
+    }
+
+    public func queryDonchian(period: Int, at index: Int) -> BandValue? {
+        var u: Double = 0, m: Double = 0, l: Double = 0
+        guard tce_query_donchian(ctx, Int32(period), index, &u, &m, &l) == 1 else { return nil }
+        return BandValue(upper: u, middle: m, lower: l)
+    }
+
+    public func queryKeltner(emaPeriod: Int, at index: Int) -> BandValue? {
+        var u: Double = 0, m: Double = 0, l: Double = 0
+        guard tce_query_keltner(ctx, Int32(emaPeriod), index, &u, &m, &l) == 1 else { return nil }
+        return BandValue(upper: u, middle: m, lower: l)
+    }
+
+    public struct MACDValue: Sendable {
+        public let line: Double
+        public let signal: Double
+        public let histogram: Double
+    }
+
+    public func queryMACD(at index: Int) -> MACDValue? {
+        var l: Double = 0, s: Double = 0, h: Double = 0
+        guard tce_query_macd(ctx, index, &l, &s, &h) == 1 else { return nil }
+        return MACDValue(line: l, signal: s, histogram: h)
+    }
+
+    public struct StochasticValue: Sendable {
+        public let k: Double
+        public let d: Double
+    }
+
+    public func queryStochastic(at index: Int) -> StochasticValue? {
+        var k: Double = 0, d: Double = 0
+        guard tce_query_stochastic(ctx, index, &k, &d) == 1 else { return nil }
+        return StochasticValue(k: k, d: d)
+    }
+
+    public struct DMIValue: Sendable {
+        public let plusDI: Double
+        public let minusDI: Double
+        public let adx: Double
+    }
+
+    public func queryDMI(period: Int, at index: Int) -> DMIValue? {
+        var p: Double = 0, m: Double = 0, a: Double = 0
+        guard tce_query_dmi(ctx, Int32(period), index, &p, &m, &a) == 1 else { return nil }
+        return DMIValue(plusDI: p, minusDI: m, adx: a)
+    }
+
+    public struct PivotValue: Sendable {
+        public let p: Double
+        public let r1: Double; public let r2: Double; public let r3: Double
+        public let s1: Double; public let s2: Double; public let s3: Double
+    }
+
+    public func queryPivot(_ kind: IndicatorKind, at index: Int) -> PivotValue? {
+        var p: Double = 0
+        var r1: Double = 0, r2: Double = 0, r3: Double = 0
+        var s1: Double = 0, s2: Double = 0, s3: Double = 0
+        guard tce_query_pivot(ctx, TceIndicatorKind(rawValue: UInt32(kind.rawValue)), index,
+                              &p, &r1, &r2, &r3, &s1, &s2, &s3) == 1 else { return nil }
+        return PivotValue(p: p, r1: r1, r2: r2, r3: r3, s1: s1, s2: s2, s3: s3)
+    }
+
+    public struct IchimokuValue: Sendable {
+        public let tenkan: Double
+        public let kijun: Double
+        public let senkouA: Double
+        public let senkouB: Double
+        public let chikou: Double
+    }
+
+    public func queryIchimoku(at index: Int) -> IchimokuValue? {
+        var t: Double = 0, k: Double = 0, sA: Double = 0, sB: Double = 0, ch: Double = 0
+        guard tce_query_ichimoku(ctx, index, &t, &k, &sA, &sB, &ch) == 1 else { return nil }
+        return IchimokuValue(tenkan: t, kijun: k, senkouA: sA, senkouB: sB, chikou: ch)
+    }
+
+    public struct SuperTrendValue: Sendable {
+        public let line: Double
+        public let direction: Int
+    }
+
+    public func querySuperTrend(at index: Int) -> SuperTrendValue? {
+        var l: Double = 0
+        var d: Int32 = 0
+        guard tce_query_supertrend(ctx, index, &l, &d) == 1 else { return nil }
+        return SuperTrendValue(line: l, direction: Int(d))
+    }
+
     // MARK: 알림 cross 콜백
 
     /// Chart 인스턴스 단위 — deinit 시 자동 해제.
@@ -319,6 +432,17 @@ public final class Chart {
         tce_set_show_grid(ctx, show ? 1 : 0)
     }
 
+    /// 거래소 세션 시작(UTC 기준) — VWAP/Pivot 일별 boundary 보정.
+    /// 예: NYSE = (14, 30), EU CET = (8, 0), KR/JP = (0, 0)(default).
+    public func setSessionStartUTC(hour: Int, minute: Int = 0) {
+        tce_set_session_start_utc(ctx, Int32(hour), Int32(minute))
+    }
+
+    /// 직접 offset(초) 지정 — `setSessionStartUTC`와 둘 중 하나만 쓰면 됨.
+    public func setSessionOffsetSeconds(_ seconds: Double) {
+        tce_set_session_offset_seconds(ctx, seconds)
+    }
+
     // MARK: 지표
 
     public func addIndicator(_ kind: IndicatorKind, period: Int, color: ChartColor) {
@@ -348,6 +472,12 @@ public final class Chart {
 
     public func addDonchian(period: Int = 20, color: ChartColor, edgeColor: ChartColor) {
         tce_add_donchian(ctx, Int32(period), color.c, edgeColor.c)
+    }
+
+    public func addKeltner(emaPeriod: Int = 20, atrPeriod: Int = 10, multiplier: Double = 2.0,
+                           color: ChartColor, edgeColor: ChartColor) {
+        tce_add_keltner(ctx, Int32(emaPeriod), Int32(atrPeriod), multiplier,
+                        color.c, edgeColor.c)
     }
 
     public func addRSI(period: Int = 14, color: ChartColor) {

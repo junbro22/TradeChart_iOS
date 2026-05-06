@@ -61,6 +61,17 @@ TradeChartView(chart: chart)
   콜백 호출. 호스트는 푸시/햅틱/사운드 트리거.
 - **Donchian Channels**: `chart.addDonchian(period: 20, color:, edgeColor:)` —
   period 캔들의 최고/최저/중앙선. 터틀 트레이딩 셋업.
+- **Keltner Channels**: `chart.addKeltner(emaPeriod: 20, atrPeriod: 10, multiplier: 2.0, color:, edgeColor:)` —
+  EMA ± multiplier × ATR. BB와 비교/대체로 자주 쓰임.
+- **지표 값 query**: crosshair hover 라벨용으로
+  `chart.queryIndicator(.sma, period: 20, at: idx)` (단일 출력),
+  `queryBollinger`/`queryMACD`/`queryStochastic`/`queryDonchian`/`queryKeltner`/`queryDMI`/`queryPivot`/`queryIchimoku`/`querySuperTrend` (다출력 전용).
+  등록된 (kind, period) spec과 정확히 일치해야 값 반환. 미등록/index 범위 밖이면 nil.
+  **Renko 주의**: query는 항상 원본 OHLC 기준으로 계산되며, 메인 패널의 brick
+  시리즈 라인과 의미가 다를 수 있다 (시각=brick, 라벨=원본).
+- **세션 시작 보정**: `chart.setSessionStartUTC(hour: 14, minute: 30)` (NYSE 09:30 EST).
+  VWAP/Pivot의 일별 boundary가 거래소 세션 시작 시각으로 정렬. KR/JP=default(0,0), CET=(8,0).
+  **DST**: 호스트가 시즌별로 UTC 시각을 다시 호출 (NYSE EDT 시 13:30, EST 시 14:30).
 
 ## 샘플 앱 실행
 

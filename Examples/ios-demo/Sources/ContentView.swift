@@ -49,8 +49,10 @@ struct ContentView: View {
     @State private var renkoBrick: Double = 0.0
     @State private var alertLineId: Int = 0
     @State private var showDonchian: Bool = false
+    @State private var showKeltner: Bool = false
     @State private var alertToast: String? = nil
     @State private var alertToastTask: Task<Void, Never>? = nil
+    @State private var crosshairInfo: Chart.CrosshairInfo? = nil
 
     enum PivotMode: String, CaseIterable, Identifiable {
         case off = "Off", standard = "Std", fibonacci = "Fib", camarilla = "Cam"
@@ -61,7 +63,10 @@ struct ContentView: View {
         VStack(spacing: 0) {
             header
             ZStack(alignment: .top) {
-                TradeChartView(chart: chart, drawingMode: $drawingMode)
+                TradeChartView(chart: chart, drawingMode: $drawingMode,
+                               onCrosshairChange: { info in
+                                   crosshairInfo = info.visible ? info : nil
+                               })
                     .background(Color(red: 0.04, green: 0.05, blue: 0.07))
                 if let msg = alertToast {
                     Text(msg)
@@ -72,11 +77,57 @@ struct ContentView: View {
                         .padding(.top, 8)
                         .transition(.opacity)
                 }
+                if let info = crosshairInfo, let lines = indicatorReadout(at: info.candleIndex) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            Text(line).font(.caption2.monospacedDigit())
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(.white)
+                    .padding(.top, 8).padding(.leading, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             controls
         }
         .ignoresSafeArea(edges: .bottom)
         .task { await applyDefaults() }
+    }
+
+    /// 등록된 지표 중 hover 위치에서 값이 있는 것만 라인으로 모음.
+    private func indicatorReadout(at index: Int) -> [String]? {
+        guard index >= 0 else { return nil }
+        var lines: [String] = []
+        if showSMA, let v = chart.queryIndicator(.sma, period: 20, at: index) {
+            lines.append(String(format: "SMA(20)  %.2f", v))
+        }
+        if showEMA, let v = chart.queryIndicator(.ema, period: 60, at: index) {
+            lines.append(String(format: "EMA(60)  %.2f", v))
+        }
+        if showRSI, let v = chart.queryIndicator(.rsi, period: 14, at: index) {
+            lines.append(String(format: "RSI(14)  %.2f", v))
+        }
+        if showATR, let v = chart.queryIndicator(.atr, period: 14, at: index) {
+            lines.append(String(format: "ATR(14)  %.3f", v))
+        }
+        if showBB, let bb = chart.queryBollinger(period: 20, at: index) {
+            lines.append(String(format: "BB U/M/L  %.1f / %.1f / %.1f", bb.upper, bb.middle, bb.lower))
+        }
+        if showDonchian, let dc = chart.queryDonchian(period: 20, at: index) {
+            lines.append(String(format: "Donch U/L  %.1f / %.1f", dc.upper, dc.lower))
+        }
+        if showKeltner, let kl = chart.queryKeltner(emaPeriod: 20, at: index) {
+            lines.append(String(format: "Keltn U/M/L  %.1f / %.1f / %.1f", kl.upper, kl.middle, kl.lower))
+        }
+        if showMACD, let m = chart.queryMACD(at: index) {
+            lines.append(String(format: "MACD  %.3f  sig %.3f", m.line, m.signal))
+        }
+        if showStoch, let s = chart.queryStochastic(at: index) {
+            lines.append(String(format: "Stoch K/D  %.1f / %.1f", s.k, s.d))
+        }
+        return lines.isEmpty ? nil : lines
     }
 
     private func applyDefaults() async {
@@ -189,6 +240,12 @@ struct ContentView: View {
                                                color:     ChartColor(r: 1.00, g: 0.55, b: 0.85),
                                                edgeColor: ChartColor(r: 1.00, g: 0.55, b: 0.85, a: 0.5))
                            : chart.removeIndicator(.donchian, period: 20)
+                    }
+                    indicatorChip("Keltn", isOn: $showKeltner) { on in
+                        on ? chart.addKeltner(emaPeriod: 20, atrPeriod: 10, multiplier: 2.0,
+                                              color:     ChartColor(r: 0.55, g: 1.00, b: 0.65),
+                                              edgeColor: ChartColor(r: 0.55, g: 1.00, b: 0.65, a: 0.5))
+                           : chart.removeIndicator(.keltner, period: 20)
                     }
                     indicatorChip("RSI",   isOn: $showRSI)   { on in
                         on ? chart.addRSI(period: 14, color: ChartColor(r: 0.95, g: 0.55, b: 0.95))
