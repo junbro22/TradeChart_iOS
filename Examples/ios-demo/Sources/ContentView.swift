@@ -52,6 +52,7 @@ struct ContentView: View {
     @State private var showKeltner: Bool = false
     @State private var showZigZag: Bool = false
     @State private var showVWAPBands: Bool = false
+    @State private var showVolumeProfile: Bool = false
     @State private var savedDrawings: [Chart.DrawingExport] = []
     @State private var alertToast: String? = nil
     @State private var alertToastTask: Task<Void, Never>? = nil
@@ -255,6 +256,12 @@ struct ContentView: View {
                                              color: ChartColor(r: 1.00, g: 0.85, b: 0.20))
                            : chart.removeIndicator(.zigzag, period: 0)
                     }
+                    indicatorChip("VolP", isOn: $showVolumeProfile) { on in
+                        on ? chart.addVolumeProfile(bins: 24, widthRatio: 0.20,
+                                barColor: ChartColor(r: 0.45, g: 0.65, b: 1.00),
+                                pocColor: ChartColor(r: 1.00, g: 0.85, b: 0.20))
+                           : chart.removeIndicator(.volumeProfile, period: 24)
+                    }
                     indicatorChip("VWAP±2σ", isOn: $showVWAPBands) { on in
                         if on {
                             chart.addVWAPWithBands(numStdev: 2.0,
@@ -375,6 +382,7 @@ struct ContentView: View {
                 drawingChip("╱",  active: drawingMode == .trendline) { drawingMode = .trendline }
                 drawingChip("▭",  active: drawingMode == .rectangle) { drawingMode = .rectangle }
                 drawingChip("Fib", active: drawingMode == .fibRetracement) { drawingMode = .fibRetracement }
+                drawingChip("FibX", active: drawingMode == .fibExtension)  { drawingMode = .fibExtension }
                 drawingChip("Mes", active: drawingMode == .measure)   { drawingMode = .measure }
                 Spacer()
                 Button("Save") { savedDrawings = chart.exportDrawings() }

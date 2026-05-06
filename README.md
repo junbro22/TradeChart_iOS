@@ -83,6 +83,15 @@ TradeChartView(chart: chart)
 - **알림 콜백 lifecycle**: host가 `setAlertCallback`의 user 컨텍스트를 해제하기 전에는
   반드시 `chart.setAlertCallback(nil)`을 명시 호출해 dangling 방지.
   `tce_destroy`도 자동 nullify하지만 destroy 이전에 user 객체가 해제되는 경로를 위해.
+- **Volume Profile**: `chart.addVolumeProfile(bins: 24, widthRatio: 0.20, barColor:, pocColor:)`.
+  plot 우측 widthRatio 영역에 가격 bin별 거래량 막대 + POC/VAH/VAL 가로선.
+  alpha는 엔진이 0.30으로 강제. **Renko 모드는 미지원** (no-op).
+- **Fib Extension**: `drawingMode = .fibExtension`. 두 점 너머 100/127.2/138.2/161.8/200/261.8% 가로선.
+  `fibRetracement`(두 점 사이)와 별개의 도구.
+- **ZigZag 시작점**: 표준 ZigZag와 일치하도록 첫 swing이 결정 시점 [0..i] 윈도우의
+  반대 극값(low for 상승, high for 하락)으로 보정됨. v0.10 동작과 시각 차이 가능.
+- **성능 baseline (v0.11)**: Release 빌드 기준 5000 candles + 8 indicators에서
+  build_frame 1.32ms / query 0.023ms. 16ms 프레임 budget 내 안전.
 
 ## 샘플 앱 실행
 

@@ -60,6 +60,7 @@ public enum IndicatorKind: Int32, Sendable {
     case donchian       = 10
     case keltner        = 11
     case zigzag         = 12
+    case volumeProfile  = 13
     // Subpanel
     case rsi        = 100
     case macd       = 101
@@ -104,6 +105,7 @@ public enum DrawingKind: Int32, Sendable {
     case fibRetracement  = 3
     case measure         = 4
     case rectangle       = 5
+    case fibExtension    = 6
 }
 
 public struct Mesh {
@@ -601,6 +603,13 @@ public final class Chart {
     /// ZigZag — deviationPct(%) 이상 swing high/low 직선. **repaint 주의**: 마지막 swing은 잠정값.
     public func addZigZag(deviationPct: Double = 5.0, color: ChartColor) {
         tce_add_zigzag(ctx, deviationPct, color.c)
+    }
+
+    /// Volume Profile — plot 우측 widthRatio 영역에 가격 bin별 거래량 막대 + POC/VAH/VAL 가로선.
+    /// alpha는 엔진이 0.30 강제. Renko 모드에서는 no-op.
+    public func addVolumeProfile(bins: Int = 24, widthRatio: Double = 0.20,
+                                 barColor: ChartColor, pocColor: ChartColor) {
+        tce_add_volume_profile(ctx, Int32(bins), widthRatio, barColor.c, pocColor.c)
     }
 
     public func addDMI(period: Int = 14,
