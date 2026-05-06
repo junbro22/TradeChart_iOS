@@ -61,6 +61,7 @@ public enum IndicatorKind: Int32, Sendable {
     case keltner        = 11
     case zigzag         = 12
     case volumeProfile  = 13
+    case hma            = 14
     // Subpanel
     case rsi        = 100
     case macd       = 101
@@ -71,6 +72,7 @@ public enum IndicatorKind: Int32, Sendable {
     case williamsR  = 106
     case obv        = 107
     case mfi        = 108
+    case stochasticRSI = 110
 }
 
 public struct ChartColor: Sendable {
@@ -305,6 +307,12 @@ public final class Chart {
     public func queryStochastic(at index: Int) -> StochasticValue? {
         var k: Double = 0, d: Double = 0
         guard tce_query_stochastic(ctx, index, &k, &d) == 1 else { return nil }
+        return StochasticValue(k: k, d: d)
+    }
+
+    public func queryStochasticRSI(at index: Int) -> StochasticValue? {
+        var k: Double = 0, d: Double = 0
+        guard tce_query_stochastic_rsi(ctx, index, &k, &d) == 1 else { return nil }
         return StochasticValue(k: k, d: d)
     }
 
@@ -549,6 +557,10 @@ public final class Chart {
         tce_add_donchian(ctx, Int32(period), color.c, edgeColor.c)
     }
 
+    public func addHMA(period: Int = 20, color: ChartColor) {
+        tce_add_hma(ctx, Int32(period), color.c)
+    }
+
     public func addKeltner(emaPeriod: Int = 20, atrPeriod: Int = 10, multiplier: Double = 2.0,
                            color: ChartColor, edgeColor: ChartColor) {
         tce_add_keltner(ctx, Int32(emaPeriod), Int32(atrPeriod), multiplier,
@@ -569,6 +581,14 @@ public final class Chart {
                               kColor: ChartColor, dColor: ChartColor) {
         tce_add_stochastic(ctx, Int32(kPeriod), Int32(dPeriod), Int32(smooth),
                            kColor.c, dColor.c)
+    }
+
+    public func addStochasticRSI(rsiPeriod: Int = 14, kPeriod: Int = 14,
+                                 dPeriod: Int = 3, smooth: Int = 3,
+                                 kColor: ChartColor, dColor: ChartColor) {
+        tce_add_stochastic_rsi(ctx, Int32(rsiPeriod), Int32(kPeriod),
+                                Int32(dPeriod), Int32(smooth),
+                                kColor.c, dColor.c)
     }
 
     public func addATR(period: Int = 14, color: ChartColor) {
@@ -672,6 +692,24 @@ public final class Chart {
 
     public func hitTestDrawing(at point: CGPoint) -> Int {
         Int(tce_drawing_hit_test(ctx, Float(point.x), Float(point.y)))
+    }
+
+    /// endpoint hit-test 결과. line fallback 시 pointIndex=nil.
+    public struct DrawingHit: Sendable {
+        public let id: Int
+        public let pointIndex: Int?  // 0/1, nil이면 line fallback
+    }
+
+    public func hitTestDrawingPoint(at point: CGPoint,
+                                     pointTolerance: CGFloat = 14,
+                                     lineTolerance: CGFloat = 12) -> DrawingHit? {
+        var pi: Int32 = -1
+        let id = tce_hit_test_drawing_point(ctx,
+                                              Float(point.x), Float(point.y),
+                                              Float(pointTolerance), Float(lineTolerance),
+                                              &pi)
+        guard id > 0 else { return nil }
+        return DrawingHit(id: Int(id), pointIndex: pi >= 0 ? Int(pi) : nil)
     }
 
     public func translateDrawing(id: Int, dxPx: CGFloat, dyPx: CGFloat) {
