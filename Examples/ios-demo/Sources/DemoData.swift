@@ -1,5 +1,5 @@
 import Foundation
-import TradeChartEngine
+import TradeChart
 
 enum DemoData {
     /// 시드 기반 의사 난수 캔들 시계열 — 실제 API 대신 데모용

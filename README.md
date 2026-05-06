@@ -8,21 +8,22 @@ iOS에서 SwiftUI로 사용하기 위한 wrapper + 샘플 앱.
 ```
 TradeChart_iOS/
 ├── Package.swift                   # SPM — TradeChartEngine 의존
-├── Sources/TradeChartEngine/       # Swift wrapper (Chart / TradeChartView / Renderer)
+├── Sources/TradeChart/             # Swift wrapper (Chart / TradeChartView / Renderer)
 └── Examples/ios-demo/              # Tuist 샘플 앱
 ```
 
-엔진(xcframework)은 TradeChartEngine repo에서 SPM binary target으로 가져옴 → wrapper는 그 위에 SwiftUI/Metal/제스처를 붙임.
+엔진(xcframework)은 TradeChartEngine repo에서 SPM binary target(`TradeChartEngineC`)으로 가져옴 →
+이 패키지가 그 위에 Swift/SwiftUI/Metal/제스처를 붙여 `TradeChart` product로 노출.
 
 ## 사용 (호스트 앱)
 
 ```swift
 .package(url: "https://github.com/junbro22/TradeChart_iOS.git", branch: "main")
-// dependency: .product(name: "TradeChartEngine", package: "TradeChart_iOS")
+// dependency: .product(name: "TradeChart", package: "TradeChart_iOS")
 ```
 
 ```swift
-import TradeChartEngine
+import TradeChart
 
 guard let chart = Chart() else {
     // tce_create 실패 — 거의 발생하지 않지만(메모리 부족) 호스트 앱은 옵셔널 처리.

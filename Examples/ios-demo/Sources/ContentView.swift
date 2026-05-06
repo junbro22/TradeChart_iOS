@@ -1,5 +1,5 @@
 import SwiftUI
-import TradeChartEngine
+import TradeChart
 
 struct ContentView: View {
 
@@ -42,7 +42,7 @@ struct ContentView: View {
     @State private var pivotKind: PivotMode = .off
     @State private var seriesType: SeriesType = .candle
     @State private var priceMode: PriceAxisMode = .linear
-    @State private var colorScheme: TradeChartEngine.ColorScheme = .korea
+    @State private var colorScheme: TradeChart.ColorScheme = .korea
     @State private var showGrid: Bool = true
     @State private var drawingMode: DrawingKind? = nil
     @State private var liveOn: Bool = false
